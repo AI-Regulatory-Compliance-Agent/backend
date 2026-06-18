@@ -59,6 +59,14 @@ class CompanyProfileRequest(BaseModel):
         description="Name of the company being analysed"
     )
 
+    # Optional: specific product or service name when analysis_type
+    # is "product" or "service". Gives agents a more focused target.
+    target_product_name: str = Field(
+        default="",
+        max_length=200,
+        description="Name of the specific product or service being analysed"
+    )
+
     # Industry determines baseline regulation checks.
     # Expanded to include consulting, managed_services, marketplace.
     industry: Literal[
