@@ -90,27 +90,18 @@ class CompanyProfileRequest(BaseModel):
     )
 
     # Multi-select: what kind of data the company processes.
-    # Each value triggers different regulation checks:
-    #   personal_identifiable → DPDP, GDPR
-    #   financial → RBI regulations
-    #   health → DPDP health provisions
-    #   biometric → stricter DPDP provisions
-    #   children_data → special DPDP/GDPR protections
-    #   none → minimal data regulations
-    data_types: list[Literal[
-        "personal_identifiable", "financial", "health",
-        "biometric", "children_data", "none"
-    ]] = Field(
+    # Common values: personal_identifiable, financial, health,
+    #   biometric, children_data, behavioral, location,
+    #   communications, employment, none
+    # Also accepts custom free-text values from the frontend.
+    data_types: list[str] = Field(
         description="Types of data the company collects or processes"
     )
 
     # Multi-select: where the company's users are located.
-    # Determines which jurisdictions' regulations apply:
-    #   india  → DPDP Act, IT Act, RBI, SEBI
-    #   eu     → GDPR
-    #   us     → sector-specific US regulations
-    #   global → all of the above
-    user_regions: list[Literal["india", "eu", "us", "global"]] = Field(
+    # Common values: india, eu, us, uk, singapore, uae, japan, australia, global
+    # Also accepts custom free-text values from the frontend.
+    user_regions: list[str] = Field(
         description="Geographic regions where the company's users are located"
     )
 
