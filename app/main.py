@@ -29,6 +29,7 @@ from app.routers import analysis
 from app.routers import sse
 from app.routers import history
 from app.routers import reports
+from app.routers import upload
 
 settings = get_settings()
 
@@ -69,6 +70,7 @@ app.add_middleware(
 
 app.include_router(auth.router)       # /auth/register, /auth/login
 app.include_router(analysis.router)   # /analyze, /analyze/result/{id}
+app.include_router(upload.router)     # /analyze/upload (document uploads)
 app.include_router(sse.router)        # /analysis/stream/{session_id}
 app.include_router(history.router)    # /history, /history/{id}
 app.include_router(reports.router)    # /reports/{id}/download

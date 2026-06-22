@@ -130,13 +130,21 @@ def start_analysis(
             "user_regions": request.user_regions,
             "processes_payments": request.processes_payments,
             "stores_health_data": request.stores_health_data,
-            "existing_compliance": request.existing_compliance
+            "existing_compliance": request.existing_compliance,
+            # New full-mode fields
+            "technical_architecture": request.technical_architecture,
+            "data_processing_details": request.data_processing_details,
+            "third_party_integrations": request.third_party_integrations,
+            "employee_count": request.employee_count,
+            "annual_revenue_range": request.annual_revenue_range,
         },
         "analysis_mode": request.analysis_mode,
         "analysis_type": request.analysis_type,
         "information_availability": request.information_availability,
         "session_id": session_id,
         "user_id": user_id,
+        # Uploaded document IDs for RAG processing
+        "uploaded_document_ids": request.uploaded_document_ids,
         # Output fields — initialised empty, filled by agent nodes
         "applicable_regulations": [],
         "gaps": [],
@@ -149,6 +157,21 @@ def start_analysis(
         "pdf_path": "",
         "error": None
     }
+
+    # ── Process Uploaded Documents via RAG ────────────────────
+    # If user uploaded documents, extract text and add to context.
+    # This runs synchronously before spawning the pipeline thread
+    # since it's fast (seconds) and needed before analysis begins.
+    if request.uploaded_document_ids:
+        document_texts = _process_uploaded_documents(
+            request.uploaded_document_ids, user_id
+        )
+        if document_texts:
+            # Append extracted document text to business description
+            # so agents have access to the full context
+            doc_context = "\n\n--- UPLOADED DOCUMENT CONTENT ---\n\n" + \
+                          "\n\n---\n\n".join(document_texts)
+            initial_state["company_profile"]["business_description"] += doc_context
 
     # ── Spawn Pipeline in Background Thread ──────────────────
     # We use threading (not asyncio) because the LangGraph pipeline
@@ -183,6 +206,86 @@ def _run_pipeline_thread(initial_state: dict):
             "error": str(e)
         })
         print(f"❌ Pipeline crashed for session {session_id}: {e}")
+
+
+def _process_uploaded_documents(document_ids: list[str], user_id: str) -> list[str]:
+    """
+    Process uploaded documents for RAG integration.
+
+    Reads uploaded files from disk, extracts text content,
+    and returns a list of extracted text strings.
+
+    Uses simple text extraction:
+      - PDF: via PyPDF2 or pdfplumber if available
+      - DOC/DOCX: via python-docx if available
+
+    Falls back to reading raw content if libraries are not installed.
+    """
+    import tempfile
+    from pathlib import Path
+
+    upload_dir = Path(tempfile.gettempdir()) / "complianceai_uploads" / user_id
+    extracted_texts = []
+
+    for doc_id in document_ids:
+        meta_path = upload_dir / f"{doc_id}.meta"
+        if not meta_path.exists():
+            print(f"⚠️ Document metadata not found: {doc_id}")
+            continue
+
+        with open(meta_path, "r") as f:
+            lines = f.read().strip().split("\n")
+            if len(lines) < 4:
+                continue
+            original_name = lines[0]
+            ext = lines[1]
+            file_path = Path(lines[3])
+
+        if not file_path.exists():
+            print(f"⚠️ Document file not found: {file_path}")
+            continue
+
+        try:
+            text = ""
+            if ext == ".pdf":
+                try:
+                    import pdfplumber
+                    with pdfplumber.open(str(file_path)) as pdf:
+                        for page in pdf.pages:
+                            page_text = page.extract_text()
+                            if page_text:
+                                text += page_text + "\n"
+                except ImportError:
+                    try:
+                        from PyPDF2 import PdfReader
+                        reader = PdfReader(str(file_path))
+                        for page in reader.pages:
+                            page_text = page.extract_text()
+                            if page_text:
+                                text += page_text + "\n"
+                    except ImportError:
+                        print(f"⚠️ No PDF library available. Install pdfplumber or PyPDF2.")
+
+            elif ext in (".doc", ".docx"):
+                try:
+                    from docx import Document
+                    doc = Document(str(file_path))
+                    text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+                except ImportError:
+                    print(f"⚠️ python-docx not installed. Cannot extract .docx content.")
+
+            if text.strip():
+                extracted_texts.append(
+                    f"[Document: {original_name}]\n{text.strip()}"
+                )
+                print(f"✅ Extracted {len(text)} chars from {original_name}")
+            else:
+                print(f"⚠️ No text extracted from {original_name}")
+
+        except Exception as e:
+            print(f"❌ Error processing {original_name}: {e}")
+
+    return extracted_texts
 
 
 # ── GET /analyze/result/{analysis_id} ────────────────────────

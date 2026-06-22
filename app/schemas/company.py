@@ -137,6 +137,58 @@ class CompanyProfileRequest(BaseModel):
         description="List of compliance certifications the company already has"
     )
 
+    # ── Full Mode: Additional Detail Fields ──────────────────
+
+    # Detailed technical infrastructure description.
+    # Helps agents assess data residency and security posture.
+    technical_architecture: str = Field(
+        default="",
+        max_length=5000,
+        description="Description of technical infrastructure, cloud providers, "
+                    "databases, encryption methods"
+    )
+
+    # How user data flows through the system.
+    # Critical for GDPR data processing assessments.
+    data_processing_details: str = Field(
+        default="",
+        max_length=5000,
+        description="How data is collected, stored, processed, and shared"
+    )
+
+    # External services and tools integrated.
+    # Triggers sub-processor compliance checks.
+    third_party_integrations: str = Field(
+        default="",
+        max_length=2000,
+        description="Third-party services used (payment, analytics, etc.)"
+    )
+
+    # Company size — affects which regulations apply.
+    # E.g., GDPR Article 30 record-keeping thresholds.
+    employee_count: str = Field(
+        default="",
+        max_length=50,
+        description="Company employee count range"
+    )
+
+    # Revenue range — affects certain compliance thresholds.
+    annual_revenue_range: str = Field(
+        default="",
+        max_length=50,
+        description="Annual revenue range"
+    )
+
+    # ── Document Upload References ───────────────────────────
+
+    # IDs of uploaded documents (returned by POST /analyze/upload).
+    # These documents will be processed through the RAG pipeline
+    # before analysis begins.
+    uploaded_document_ids: list[str] = Field(
+        default=[],
+        description="IDs of uploaded supporting documents for RAG processing"
+    )
+
 
 class CompanyProfileResponse(BaseModel):
     """
