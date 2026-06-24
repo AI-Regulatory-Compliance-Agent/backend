@@ -1,4 +1,4 @@
-<![CDATA[# 🧠 ComplianceAI — Backend
+# 🧠 ComplianceAI — Backend
 
 > FastAPI backend powering the AI Regulatory Compliance Agent. Orchestrates a 5-agent LangGraph pipeline that identifies applicable regulations, performs gap analysis, scores risks, generates remediation plans, and produces PDF compliance reports.
 
@@ -280,4 +280,3 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ## License
 
 This project is licensed under the **GNU General Public License v2** — see the [LICENSE](LICENSE) file for details.
-]]>
