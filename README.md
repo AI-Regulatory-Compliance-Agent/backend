@@ -1,4 +1,4 @@
-# 🧠 ComplianceAI — Backend
+# 🧠 ComplianceAI - Backend
 
 > FastAPI backend powering the AI Regulatory Compliance Agent. Orchestrates a 5-agent LangGraph pipeline that identifies applicable regulations, performs gap analysis, scores risks, generates remediation plans, and produces PDF compliance reports.
 
