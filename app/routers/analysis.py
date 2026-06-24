@@ -164,7 +164,8 @@ def start_analysis(
     # since it's fast (seconds) and needed before analysis begins.
     if request.uploaded_document_ids:
         document_texts = _process_uploaded_documents(
-            request.uploaded_document_ids, user_id
+            request.uploaded_document_ids, user_id,
+            company_id=str(company.id)
         )
         if document_texts:
             # Append extracted document text to business description
@@ -208,24 +209,38 @@ def _run_pipeline_thread(initial_state: dict):
         print(f"❌ Pipeline crashed for session {session_id}: {e}")
 
 
-def _process_uploaded_documents(document_ids: list[str], user_id: str) -> list[str]:
+def _process_uploaded_documents(
+    document_ids: list[str], user_id: str, company_id: str = None
+) -> list[str]:
     """
     Process uploaded documents for RAG integration.
 
-    Reads uploaded files from disk, extracts text content,
-    and returns a list of extracted text strings.
+    1. Reads uploaded files from disk and extracts text content
+    2. Chunks the extracted text using the same strategy as ingestion
+    3. Embeds chunks and stores them in Qdrant with company_id metadata
+    4. Returns extracted text strings for appending to business_description
 
-    Uses simple text extraction:
-      - PDF: via PyPDF2 or pdfplumber if available
-      - DOC/DOCX: via python-docx if available
-
-    Falls back to reading raw content if libraries are not installed.
+    Documents stored in Qdrant get:
+      - source_type: "company_document" (to distinguish from regulations)
+      - company_id: for filtering during search
     """
+    import os
+    import uuid as _uuid
     import tempfile
     from pathlib import Path
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-    upload_dir = Path(tempfile.gettempdir()) / "complianceai_uploads" / user_id
+    # Check persistent storage first, fall back to temp dir for backward compat
+    persistent_dir = Path(os.getenv("UPLOAD_DIR", "/data/uploads"))
+    scope_id = company_id if company_id else user_id
+    upload_dir = persistent_dir / scope_id
+
+    # Fallback to legacy temp directory if persistent dir doesn't exist
+    if not upload_dir.exists():
+        upload_dir = Path(tempfile.gettempdir()) / "complianceai_uploads" / user_id
+
     extracted_texts = []
+    all_doc_chunks = []  # Collect chunks for Qdrant embedding
 
     for doc_id in document_ids:
         meta_path = upload_dir / f"{doc_id}.meta"
@@ -279,13 +294,107 @@ def _process_uploaded_documents(document_ids: list[str], user_id: str) -> list[s
                     f"[Document: {original_name}]\n{text.strip()}"
                 )
                 print(f"✅ Extracted {len(text)} chars from {original_name}")
+
+                # Chunk the extracted text for Qdrant embedding
+                splitter = RecursiveCharacterTextSplitter(
+                    chunk_size=500,
+                    chunk_overlap=50,
+                    separators=["\n\n", "\n", ". ", " ", ""]
+                )
+                chunks = splitter.split_text(text.strip())
+                for i, chunk_text in enumerate(chunks):
+                    all_doc_chunks.append({
+                        "text": chunk_text,
+                        "original_name": original_name,
+                        "doc_id": doc_id,
+                        "chunk_index": i,
+                    })
             else:
                 print(f"⚠️ No text extracted from {original_name}")
 
         except Exception as e:
             print(f"❌ Error processing {original_name}: {e}")
 
+    # Embed document chunks and store in Qdrant with company_id
+    if all_doc_chunks and company_id:
+        try:
+            _embed_and_store_doc_chunks(all_doc_chunks, company_id)
+        except Exception as e:
+            print(f"❌ Failed to embed document chunks into Qdrant: {e}")
+
     return extracted_texts
+
+
+def _embed_and_store_doc_chunks(chunks: list[dict], company_id: str):
+    """
+    Embed document chunks and store them in Qdrant with company_id metadata.
+
+    Uses the same embedding model as qdrant_search.py to ensure consistency.
+    Chunks are stored in the same 'regulations' collection but with
+    source_type='company_document' to distinguish them from government regulations.
+    """
+    import uuid as _uuid
+    from app.tools.qdrant_search import _embedding_model, generate_sparse_vector
+    from app.qdrant_client import qdrant_client
+    from app.config import get_settings
+    from qdrant_client.models import PointStruct, SparseVector
+
+    settings = get_settings()
+
+    texts = [c["text"] for c in chunks]
+    vectors = _embedding_model.encode(texts, batch_size=32, convert_to_numpy=True)
+
+    points = []
+    for i, chunk in enumerate(chunks):
+        dense_vector = vectors[i].tolist()
+
+        # Generate sparse vector for hybrid search
+        sparse_indices, sparse_values = generate_sparse_vector(chunk["text"])
+
+        point_vectors = {"dense": dense_vector}
+        # Only add sparse vector if we have tokens
+        sparse_dict = {}
+        if sparse_indices:
+            sparse_dict["sparse"] = SparseVector(
+                indices=sparse_indices, values=sparse_values
+            )
+
+        point = PointStruct(
+            id=str(_uuid.uuid4()),
+            vector=point_vectors,
+            payload={
+                "chunk_id": f"{chunk['doc_id']}_chunk_{chunk['chunk_index']:04d}",
+                "regulation_name": f"Company Document: {chunk['original_name']}",
+                "source_file": chunk["original_name"],
+                "page_number": 0,
+                "text": chunk["text"],
+                "token_count": len(chunk["text"].split()),
+                "source_type": "company_document",
+                "company_id": company_id,
+            }
+        )
+        points.append(point)
+
+    # Upload in batches of 100
+    batch_size = 100
+    for i in range(0, len(points), batch_size):
+        batch = points[i:i + batch_size]
+        try:
+            qdrant_client.upsert(
+                collection_name=settings.qdrant_collection,
+                points=batch
+            )
+        except Exception as e:
+            # If named vectors aren't set up yet, try without sparse
+            print(f"⚠️ Qdrant upsert with named vectors failed, trying legacy format: {e}")
+            for pt in batch:
+                pt.vector = dense_vector  # fallback to unnamed vector
+            qdrant_client.upsert(
+                collection_name=settings.qdrant_collection,
+                points=batch
+            )
+
+    print(f"✅ Stored {len(points)} document chunks in Qdrant for company {company_id}")
 
 
 # ── GET /analyze/result/{analysis_id} ────────────────────────

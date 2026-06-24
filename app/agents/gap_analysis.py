@@ -69,6 +69,7 @@ def analyze_gaps(state: ComplianceState) -> dict:
     regulations = state.get("applicable_regulations", [])
     analysis_type = state["analysis_type"]
     info_availability = state["information_availability"]
+    company_id = profile.get("company_id")
 
     # Check for upstream errors — skip if regulation identification failed
     if state.get("error"):
@@ -87,14 +88,16 @@ def analyze_gaps(state: ComplianceState) -> dict:
             reg_chunks = search_regulations(
                 query=f"{reg_name} requirements obligations",
                 regulation_name=reg_name,
-                top_k=8
+                top_k=8,
+                company_id=company_id
             )
 
             # If no chunks found with exact name, try broader search
             if not reg_chunks:
                 reg_chunks = search_regulations(
                     query=reg_name,
-                    top_k=5
+                    top_k=5,
+                    company_id=company_id
                 )
 
             # Build regulation context from retrieved chunks

@@ -93,7 +93,10 @@ def identify_regulations(state: ComplianceState) -> dict:
         if info_availability != "minimal":
             # Use business description to find relevant regulation chunks
             description = profile.get("business_description", "")
-            rag_results = search_regulations(description, top_k=10)
+            rag_results = search_regulations(
+                description, top_k=10,
+                company_id=profile.get("company_id")
+            )
             if rag_results:
                 rag_context = "\n\nRelevant regulation excerpts:\n"
                 for chunk in rag_results:

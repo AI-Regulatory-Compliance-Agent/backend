@@ -64,6 +64,7 @@ def generate_remediation(state: ComplianceState) -> dict:
     scored_gaps = state.get("scored_gaps", [])
     analysis_type = state["analysis_type"]
     profile = state["company_profile"]
+    company_id = profile.get("company_id")
 
     if state.get("error"):
         return {"remediation_plan": [], "error": state["error"]}
@@ -90,7 +91,8 @@ def generate_remediation(state: ComplianceState) -> dict:
             chunks = search_regulations(
                 query=f"{reg_name} compliance requirements remediation",
                 regulation_name=reg_name,
-                top_k=5
+                top_k=5,
+                company_id=company_id
             )
             if chunks:
                 context = "\n".join(c["text"] for c in chunks)
