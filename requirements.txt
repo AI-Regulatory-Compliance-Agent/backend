@@ -49,3 +49,4 @@ email-validator==2.2.0
 
 # ── HTTP Client (for web_search tool) ────────────────────────
 httpx==0.28.0
+langchain-groq

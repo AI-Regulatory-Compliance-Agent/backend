@@ -5,7 +5,9 @@ from functools import lru_cache
 class Settings(BaseSettings):
 
     # LLM
-    gemini_api_key: str
+    gemini_api_key: str = ""
+    groq_api_key: str = ""
+    gemini_model: str = "gemini-1.5-flash"
 
     # PostgreSQL
     postgres_user: str

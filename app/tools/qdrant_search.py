@@ -31,7 +31,7 @@ settings = get_settings()
 # Loaded once at module import time. Same model used during ingestion
 # to ensure query embeddings match document embeddings.
 # Model: all-MiniLM-L6-v2 → 384-dimensional vectors
-_embedding_model = SentenceTransformer(settings.embedding_model)
+_embedding_model = SentenceTransformer(settings.embedding_model, local_files_only=True)
 
 
 def search_regulations(

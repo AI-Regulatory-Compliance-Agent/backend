@@ -27,7 +27,7 @@ OUTPUT:
 """
 
 import json
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from app.agents.state import ComplianceState
 from app.tools.qdrant_search import search_regulations
 from app.redis_client import set_agent_progress
@@ -37,9 +37,9 @@ settings = get_settings()
 
 # ── LLM Instance ────────────────────────────────────────────
 # Temperature 0.3 — slightly creative for actionable remediation advice.
-_llm = ChatGoogleGenerativeAI(
-    model="gemini-2.0-flash",
-    google_api_key=settings.gemini_api_key,
+_llm = ChatGroq(
+    model="llama-3.3-70b-versatile",
+    api_key=get_settings().groq_api_key,
     temperature=0.3
 )
 
@@ -66,7 +66,7 @@ def generate_remediation(state: ComplianceState) -> dict:
     profile = state["company_profile"]
 
     if state.get("error"):
-        return {"remediation_plan": []}
+        return {"remediation_plan": [], "error": state["error"]}
 
     set_agent_progress(session_id, "remediation", "running")
 

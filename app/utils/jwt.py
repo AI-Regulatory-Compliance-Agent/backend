@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
 from fastapi import HTTPException, status
 from app.config import get_settings
@@ -7,7 +7,7 @@ settings = get_settings()
 
 
 def create_token(user_id: str) -> str:
-    expire = datetime.utcnow() + timedelta(
+    expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.jwt_expire_minutes
     )
     payload = {

@@ -23,4 +23,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# ── Pre-download embedding model at build time ──────────────
+# Same model used by ingestion. Downloaded once during build
+# so the container never needs to reach HuggingFace at runtime.
+RUN python -c "from sentence_transformers import SentenceTransformer; \
+    SentenceTransformer('all-MiniLM-L6-v2')"
+
+ENV TRANSFORMERS_OFFLINE=1
+ENV HF_HUB_OFFLINE=1
+
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

@@ -16,7 +16,7 @@ the full company profile so the form can be pre-populated.
 
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.models.analysis import AnalysisRun
 from app.models.company import Company
@@ -48,19 +48,16 @@ def get_analysis_history(
     """
     analyses = (
         db.query(AnalysisRun)
+        .options(joinedload(AnalysisRun.company))
         .filter(AnalysisRun.user_id == uuid.UUID(user_id))
         .order_by(AnalysisRun.created_at.desc())
         .all()
     )
 
-    # Build response with company name from joined table
+    # Build response with company name from eager-loaded relationship
     items = []
     for analysis in analyses:
-        # Fetch company name via relationship
-        company = db.query(Company).filter(
-            Company.id == analysis.company_id
-        ).first()
-        company_name = company.company_name if company else "Unknown"
+        company_name = analysis.company.company_name if analysis.company else "Unknown"
 
         items.append(AnalysisHistoryItem(
             id=str(analysis.id),

@@ -29,7 +29,7 @@ OUTPUT:
 """
 
 import json
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from app.agents.state import ComplianceState
 from app.tools.qdrant_search import search_regulations
 from app.redis_client import set_agent_progress
@@ -40,9 +40,9 @@ settings = get_settings()
 # ── LLM Instance ────────────────────────────────────────────
 # Temperature 0.1 for more precise gap identification.
 # Lower temp = less creative = more factual gap analysis.
-_llm = ChatGoogleGenerativeAI(
-    model="gemini-2.0-flash",
-    google_api_key=settings.gemini_api_key,
+_llm = ChatGroq(
+    model="llama-3.3-70b-versatile",
+    api_key=get_settings().groq_api_key,
     temperature=0.1
 )
 
@@ -72,7 +72,7 @@ def analyze_gaps(state: ComplianceState) -> dict:
 
     # Check for upstream errors — skip if regulation identification failed
     if state.get("error"):
-        return {"gaps": []}
+        return {"gaps": [], "error": state["error"]}
 
     set_agent_progress(session_id, "gap_analysis", "running")
 

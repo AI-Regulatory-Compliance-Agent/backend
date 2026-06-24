@@ -29,7 +29,7 @@ OUTPUT:
 """
 
 import json
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from app.agents.state import ComplianceState
 from app.tools.qdrant_search import search_regulations
 from app.tools.web_search import search_web
@@ -41,9 +41,9 @@ settings = get_settings()
 # ── LLM Instance ────────────────────────────────────────────
 # Using Gemini via langchain-google-genai for structured reasoning.
 # Temperature 0.2 for more deterministic regulation identification.
-_llm = ChatGoogleGenerativeAI(
-    model="gemini-2.0-flash",
-    google_api_key=settings.gemini_api_key,
+_llm = ChatGroq(
+    model="llama-3.3-70b-versatile",
+    api_key=get_settings().groq_api_key,
     temperature=0.2
 )
 

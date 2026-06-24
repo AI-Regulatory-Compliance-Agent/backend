@@ -36,7 +36,7 @@ OUTPUT:
 """
 
 import json
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from app.agents.state import ComplianceState
 from app.redis_client import set_agent_progress
 from app.config import get_settings
@@ -45,9 +45,9 @@ settings = get_settings()
 
 # ── LLM Instance ────────────────────────────────────────────
 # Temperature 0.1 for consistent scoring across runs.
-_llm = ChatGoogleGenerativeAI(
-    model="gemini-2.0-flash",
-    google_api_key=settings.gemini_api_key,
+_llm = ChatGroq(
+    model="llama-3.3-70b-versatile",
+    api_key=get_settings().groq_api_key,
     temperature=0.1
 )
 
@@ -99,7 +99,8 @@ def score_risks(state: ComplianceState) -> dict:
             "scored_gaps": [],
             "overall_risk_score": 0,
             "risk_score_range": None,
-            "confidence_level": info_availability
+            "confidence_level": info_availability,
+            "error": state["error"]
         }
 
     set_agent_progress(session_id, "risk_scoring", "running")

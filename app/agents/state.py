@@ -76,6 +76,11 @@ class ComplianceState(TypedDict):
     # User UUID — used by report_generator to save to PostgreSQL
     user_id: str
 
+    # IDs of uploaded documents for RAG processing.
+    # Passed from the analysis router; used to inject document
+    # content into the company profile before analysis begins.
+    uploaded_document_ids: list[str]
+
     # ── Node 1 Output: regulation_identifier ─────────────────
     # List of regulations that apply to this company/product/service.
     # Each item: {"name": str, "relevance": str, "confidence": str}
