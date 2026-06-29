@@ -12,20 +12,21 @@ Data flow through the pipeline:
   └──────────┬───────────┘
              ▼
   ┌──────────────────────┐
-  │ regulation_identifier│ → writes: applicable_regulations
+  │ regulation_identifier│ → writes: applicable_regulations, web_search_results
   └──────────┬───────────┘
              ▼
   ┌──────────────────────┐
-  │    gap_analysis      │ → writes: gaps
+  │    gap_analysis      │ → writes: gaps (reads web_search_results)
   └──────────┬───────────┘
              ▼
   ┌──────────────────────┐
   │    risk_scoring      │ → writes: scored_gaps, overall_risk_score,
   │                      │          risk_score_range, confidence_level
+  │                      │   (reads web_search_results, may add enforcement search)
   └──────────┬───────────┘
              ▼
   ┌──────────────────────┐
-  │    remediation       │ → writes: remediation_plan
+  │    remediation       │ → writes: remediation_plan (reads web_search_results)
   └──────────┬───────────┘
              ▼
   ┌──────────────────────┐
@@ -87,6 +88,14 @@ class ComplianceState(TypedDict):
     # Confidence is one of: CONFIRMED, PROBABLE, UNKNOWN
     applicable_regulations: list[dict]
 
+    # Web search snippets gathered in external mode.
+    # Populated by regulation_identifier (Node 1) when analysis_mode
+    # is "external". Passed through to Nodes 2, 3, and 4 so they
+    # can ground their prompts in publicly available information.
+    # Each item is a plain-text string snippet from the search results.
+    # Empty list when analysis_mode is "self".
+    web_search_results: list[str]
+
     # ── Node 2 Output: gap_analysis ──────────────────────────
     # List of compliance gaps found.
     # Each item: {"regulation": str, "requirement": str,
@@ -95,7 +104,8 @@ class ComplianceState(TypedDict):
 
     # ── Node 3 Output: risk_scoring ──────────────────────────
     # Gaps with severity scores added.
-    # Each item: {"...gap fields...", "severity": int, "risk_level": str}
+    # Each item: {"...gap fields...", "severity": int, "risk_level": str,
+    #             "score_range": str (only in external mode, e.g. "65-80")}
     scored_gaps: list[dict]
 
     # Single overall risk score (0-100). Always set.

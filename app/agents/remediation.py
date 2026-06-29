@@ -12,6 +12,15 @@ REMEDIATION LABELS:
   verify_first — for UNKNOWN confidence gaps; verify the gap
                  actually exists before implementing the fix
 
+EXTERNAL MODE:
+  When analysis_mode is "external", the web_search_results from Node 1
+  are injected into the remediation prompt. This allows the LLM to:
+  - Reference known enforcement actions and what regulators penalised
+  - Suggest remediation steps that directly address documented violations
+  - Prioritise actions that match patterns of real regulatory scrutiny
+  For example: "Regulators fined X company for missing a DPA appointment
+  — prioritize appointing a Data Protection Officer first."
+
 COMPANY TYPE BEHAVIOUR:
   When analysis_type is "company":
   - Remediations focus on obtaining licenses/registrations
@@ -50,8 +59,10 @@ def generate_remediation(state: ComplianceState) -> dict:
 
     Reads from state:
       - scored_gaps (from Node 3, gaps with severity + risk_level)
+      - web_search_results (from Node 1, populated in external mode)
       - company_profile
       - analysis_type
+      - analysis_mode
       - session_id
 
     Writes to state:
@@ -63,8 +74,13 @@ def generate_remediation(state: ComplianceState) -> dict:
     session_id = state["session_id"]
     scored_gaps = state.get("scored_gaps", [])
     analysis_type = state["analysis_type"]
+    analysis_mode = state["analysis_mode"]
     profile = state["company_profile"]
     company_id = profile.get("company_id")
+
+    # Pull web search results gathered by Node 1 (external mode only).
+    # In self mode this is an empty list and web_context stays "".
+    web_search_results = state.get("web_search_results", [])
 
     if state.get("error"):
         return {"remediation_plan": [], "error": state["error"]}
@@ -103,7 +119,9 @@ def generate_remediation(state: ComplianceState) -> dict:
             scored_gaps=scored_gaps,
             profile=profile,
             analysis_type=analysis_type,
-            reg_contexts=reg_contexts
+            analysis_mode=analysis_mode,
+            reg_contexts=reg_contexts,
+            web_search_results=web_search_results
         )
 
         response = _llm.invoke(prompt)
@@ -124,9 +142,16 @@ def _build_remediation_prompt(
     scored_gaps: list[dict],
     profile: dict,
     analysis_type: str,
-    reg_contexts: dict
+    analysis_mode: str,
+    reg_contexts: dict,
+    web_search_results: list[str]
 ) -> str:
-    """Build the remediation prompt with gap details and regulation context."""
+    """Build the remediation prompt with gap details and regulation context.
+
+    In external mode, also injects the web search results as enforcement
+    intelligence so the LLM can suggest remediation steps that directly
+    address documented regulatory penalties and enforcement patterns.
+    """
 
     # Format gaps
     gaps_text = ""
@@ -147,6 +172,21 @@ Gap {i}:
         reg_context_text = "\n\nRelevant regulation text for reference:\n"
         for reg_name, context in reg_contexts.items():
             reg_context_text += f"\n--- {reg_name} ---\n{context}\n"
+
+    # External mode: inject web research as enforcement intelligence.
+    # Placed BEFORE the labeling rules so it informs prioritisation.
+    web_context_block = ""
+    if analysis_mode == "external" and web_search_results:
+        web_context_block = """
+ENFORCEMENT INTELLIGENCE (from external web research):
+Use these publicly known facts about the company and its regulatory environment
+to suggest more targeted remediation. Where enforcement actions are documented,
+prioritise those specific remediation steps higher and mention the precedent
+in your action description.
+"""
+        for snippet in web_search_results:
+            web_context_block += f"• {snippet}\n"
+        web_context_block += "\n"
 
     # Analysis type specific instructions
     if analysis_type == "company":
@@ -174,7 +214,7 @@ TASK: For each compliance gap, generate a specific, actionable remediation step.
 COMPANY: {profile.get('target_company_name', 'Unknown')}
 INDUSTRY: {profile.get('industry', 'Unknown')}
 {type_instructions}
-
+{web_context_block}
 LABELING RULES:
 - "mandatory": Required by law. Non-compliance = penalties. MUST implement.
 - "recommended": Best practice. Strongly advised but not legally required.

@@ -12,6 +12,12 @@ PURPOSE:
 This is the ONLY node that interacts with PostgreSQL. All previous
 nodes only read from Qdrant and write to the in-memory LangGraph state.
 
+EXTERNAL MODE:
+  When analysis_mode is "external", the report_data dict includes
+  analysis_mode so that pdf_generator can:
+  - Display a "🌐 External Research Mode" badge on the cover page
+  - Add a methodology note in the disclaimer section
+
 PERSISTENCE:
   After this node runs:
     - PostgreSQL analysis_runs row has all JSONB fields populated
@@ -40,6 +46,7 @@ def generate_report(state: ComplianceState) -> dict:
     Reads from state:
       - ALL fields from previous nodes
       - company_profile (for report metadata)
+      - analysis_mode (for external research notation in PDF)
       - session_id, user_id (for database writes)
 
     Writes to state:
@@ -96,6 +103,9 @@ def _build_report(state: ComplianceState) -> dict:
     This JSON is used in two ways:
       1. Fed into pdf_generator to create the PDF
       2. Stored in analysis_runs for API retrieval
+
+    In external mode, analysis_mode is passed through so that the
+    PDF generator can add the external research badge and footer note.
     """
     profile = state.get("company_profile", {})
     risk_score = state.get("overall_risk_score", 0)
@@ -116,7 +126,8 @@ def _build_report(state: ComplianceState) -> dict:
         "industry": profile.get("industry", "Unknown"),
         "business_type": profile.get("business_type", "Unknown"),
 
-        # Analysis config
+        # Analysis config — analysis_mode is passed to pdf_generator
+        # so it can annotate the PDF when mode is "external"
         "analysis_type": state.get("analysis_type", "product"),
         "analysis_mode": state.get("analysis_mode", "self"),
         "information_availability": state.get("information_availability", "full"),

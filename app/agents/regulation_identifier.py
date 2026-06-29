@@ -8,10 +8,10 @@ PURPOSE:
 BEHAVIOUR BY ANALYSIS TYPE:
   product/service + full/partial:
     → RAG search Qdrant with business_description
-    → Gemini reasons which regulations actually apply
+    → Groq LLM reasons which regulations actually apply
   product/service + minimal:
     → Industry baseline prompt (no RAG over description)
-    → Gemini infers from industry alone
+    → Groq LLM infers from industry alone
   company type:
     → Searches for licensing/registration requirements
     → Different prompt focused on corporate obligations
@@ -20,12 +20,13 @@ EXTERNAL MODE:
   When analysis_mode is "external", the web_search tool is called
   FIRST to gather public info about the target company. These
   search results are added to the LLM prompt as context before
-  regulation identification.
+  regulation identification, AND are stored in state["web_search_results"]
+  so that Nodes 2, 3, and 4 can also use them without re-searching.
 
 OUTPUT:
-  Writes applicable_regulations to state:
-  [{"name": "DPDP Act", "relevance": "Handles personal data of Indian users",
-    "confidence": "CONFIRMED"}]
+  Writes to state:
+    applicable_regulations: list[dict]
+    web_search_results: list[str]  — empty list when mode is "self"
 """
 
 import json
@@ -39,7 +40,7 @@ from app.config import get_settings
 settings = get_settings()
 
 # ── LLM Instance ────────────────────────────────────────────
-# Using Gemini via langchain-google-genai for structured reasoning.
+# Using Groq llama-3.3-70b for structured reasoning.
 # Temperature 0.2 for more deterministic regulation identification.
 _llm = ChatGroq(
     model="llama-3.3-70b-versatile",
@@ -61,6 +62,7 @@ def identify_regulations(state: ComplianceState) -> dict:
 
     Writes to state:
       - applicable_regulations: list[dict]
+      - web_search_results: list[str]  (populated in external mode, [] otherwise)
 
     Returns:
       Dict with keys to merge into ComplianceState.
@@ -77,16 +79,24 @@ def identify_regulations(state: ComplianceState) -> dict:
     try:
         # ── Step 1: Gather context ───────────────────────────
 
-        # If external mode, search the web first for public info
+        # If external mode, search the web first for public info.
+        # Store results in web_search_results so downstream agents
+        # (gap_analysis, risk_scoring, remediation) can reuse them
+        # without making additional web requests.
+        web_search_results = []
         web_context = ""
         if analysis_mode == "external":
             company_name = profile.get("target_company_name", "")
             industry = profile.get("industry", "")
-            search_query = f"{company_name} {industry} compliance regulations India"
-            web_results = search_web(search_query)
-            if web_results:
+            regions = ", ".join(profile.get("user_regions", [])) or "India"
+            search_query = (
+                f"{company_name} {industry} regulatory compliance "
+                f"data protection {regions}"
+            )
+            web_search_results = search_web(search_query, num_results=6)
+            if web_search_results:
                 web_context = "\n\nPublic information found about this company:\n"
-                web_context += "\n".join(f"- {r}" for r in web_results)
+                web_context += "\n".join(f"- {r}" for r in web_search_results)
 
         # ── Step 2: RAG search (skip for minimal info) ───────
         rag_context = ""
@@ -115,7 +125,7 @@ def identify_regulations(state: ComplianceState) -> dict:
             web_context=web_context
         )
 
-        # ── Step 4: Call Gemini ───────────────────────────────
+        # ── Step 4: Call LLM ──────────────────────────────────
         response = _llm.invoke(prompt)
 
         # ── Step 5: Parse the response ────────────────────────
@@ -124,12 +134,16 @@ def identify_regulations(state: ComplianceState) -> dict:
         # ── Step 6: Signal completion ─────────────────────────
         set_agent_progress(session_id, "regulation_identifier", "complete")
 
-        return {"applicable_regulations": regulations}
+        return {
+            "applicable_regulations": regulations,
+            "web_search_results": web_search_results,
+        }
 
     except Exception as e:
         set_agent_progress(session_id, "regulation_identifier", "failed")
         return {
             "applicable_regulations": [],
+            "web_search_results": [],
             "error": f"Regulation identification failed: {str(e)}"
         }
 

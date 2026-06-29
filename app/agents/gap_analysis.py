@@ -9,12 +9,19 @@ PURPOSE:
 HOW IT WORKS:
   1. Loops through each regulation from applicable_regulations
   2. RAG searches Qdrant for detailed clauses of that specific regulation
-  3. Sends regulation text + company description to Gemini
-  4. Gemini identifies specific gaps (what the reg requires vs what's missing)
+  3. Sends regulation text + company description to Groq LLM
+  4. LLM identifies specific gaps (what the reg requires vs what's missing)
   5. Each gap is tagged with a confidence level:
        CONFIRMED  — gap is clearly present based on stated info
        PROBABLE   — gap is likely based on industry norms
        UNKNOWN    — cannot determine without internal access
+
+EXTERNAL MODE:
+  When analysis_mode is "external", the web_search_results from Node 1
+  are injected into every gap analysis prompt as additional context.
+  This grounds gap identification in publicly known information about
+  the company (e.g. known data practices, past incidents, public filings)
+  rather than relying solely on what the user described in the form.
 
 COMPANY TYPE BEHAVIOUR:
   When analysis_type is "company", the agent focuses on:
@@ -53,8 +60,10 @@ def analyze_gaps(state: ComplianceState) -> dict:
 
     Reads from state:
       - applicable_regulations (from Node 1)
+      - web_search_results (from Node 1, populated in external mode)
       - company_profile
       - analysis_type
+      - analysis_mode
       - information_availability
       - session_id
 
@@ -68,8 +77,13 @@ def analyze_gaps(state: ComplianceState) -> dict:
     profile = state["company_profile"]
     regulations = state.get("applicable_regulations", [])
     analysis_type = state["analysis_type"]
+    analysis_mode = state["analysis_mode"]
     info_availability = state["information_availability"]
     company_id = profile.get("company_id")
+
+    # Pull web search results that were gathered by Node 1 (external mode).
+    # In self mode this will be an empty list, so web_context stays "".
+    web_search_results = state.get("web_search_results", [])
 
     # Check for upstream errors — skip if regulation identification failed
     if state.get("error"):
@@ -113,10 +127,12 @@ def analyze_gaps(state: ComplianceState) -> dict:
                 regulation=regulation,
                 reg_context=reg_context,
                 analysis_type=analysis_type,
-                info_availability=info_availability
+                info_availability=info_availability,
+                analysis_mode=analysis_mode,
+                web_search_results=web_search_results
             )
 
-            # Call Gemini
+            # Call LLM
             response = _llm.invoke(prompt)
 
             # Parse gaps for this regulation
@@ -139,7 +155,9 @@ def _build_gap_prompt(
     regulation: dict,
     reg_context: str,
     analysis_type: str,
-    info_availability: str
+    info_availability: str,
+    analysis_mode: str,
+    web_search_results: list[str]
 ) -> str:
     """
     Build the gap analysis prompt for a specific regulation.
@@ -148,8 +166,9 @@ def _build_gap_prompt(
       1. System context (what you are, what you're doing)
       2. Regulation details (name, relevance, actual text from Qdrant)
       3. Company details (what the company does)
-      4. Instructions (what to look for, how to tag confidence)
-      5. Output format
+      4. [External mode] Public web research about the company
+      5. Instructions (what to look for, how to tag confidence)
+      6. Output format
     """
     reg_name = regulation.get("name", "Unknown")
     reg_relevance = regulation.get("relevance", "")
@@ -194,6 +213,21 @@ Look for:
         "minimal": "Tag most gaps as UNKNOWN since information is minimal. Only tag as CONFIRMED if explicitly contradicted by the description."
     }
 
+    # External mode: inject web research as a grounding context block.
+    # This is placed BEFORE the confidence rules so the LLM can use it
+    # when deciding whether to tag a gap as CONFIRMED vs PROBABLE.
+    web_context_block = ""
+    if analysis_mode == "external" and web_search_results:
+        web_context_block = """
+EXTERNAL RESEARCH CONTEXT (public information gathered about this company):
+Use these findings to make more accurate gap assessments. If public sources
+confirm a practice or gap, you may tag it as CONFIRMED even if not stated
+explicitly in the company description.
+"""
+        for snippet in web_search_results:
+            web_context_block += f"• {snippet}\n"
+        web_context_block += "\n"
+
     prompt = f"""You are a regulatory compliance auditor performing a detailed gap analysis.
 
 REGULATION: {reg_name}
@@ -203,7 +237,7 @@ Why it applies: {reg_relevance}
 COMPANY BEING ANALYSED:
 {company_section}
 {focus}
-
+{web_context_block}
 CONFIDENCE TAGGING RULES:
 Information availability: {info_availability}
 {confidence_rules.get(info_availability, confidence_rules['partial'])}

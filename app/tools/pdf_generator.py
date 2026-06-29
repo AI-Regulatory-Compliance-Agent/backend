@@ -7,10 +7,12 @@ generates a professional PDF document using ReportLab.
 
 PDF Structure:
   Page 1:  Cover — full-bleed navy header, company name, risk badge, stat pills
+           [External mode] — "🌐 External Research Mode" badge below the header
   Page 2:  Executive summary + stat cards + applicable regulations table
+           [External mode] — methodology note about web research + confidence tags
   Page N:  Compliance gaps table (colour-coded risk column)
   Page N:  Remediation plan table
-  Last:    Disclaimer
+  Last:    Disclaimer + [External mode] methodology footer note
 
 Design language:
   - Navy #0f2044 for headers/accents
@@ -50,6 +52,11 @@ TEXT_DARK   = colors.HexColor("#111827")
 TEXT_MID    = colors.HexColor("#374151")
 TEXT_LIGHT  = colors.HexColor("#6b7280")
 WHITE       = colors.white
+
+# External Research Mode badge colour — teal to visually distinguish
+# from the navy/blue brand palette
+EXTERNAL_BADGE_BG   = colors.HexColor("#0e7490")   # cyan-700
+EXTERNAL_BADGE_TEXT = colors.HexColor("#ecfeff")   # cyan-50
 
 RISK_COLORS = {
     "CRITICAL": colors.HexColor("#dc2626"),
@@ -132,6 +139,36 @@ class RiskBadge(Flowable):
         return self._w, self._h
 
 
+# ── External Research Mode badge flowable ─────────────────────
+class ExternalResearchBadge(Flowable):
+    """
+    Teal pill badge shown on the cover page when analysis_mode is "external".
+    Signals to the reader that web research was used to gather information.
+    """
+    def __init__(self, width=None):
+        super().__init__()
+        self._w = width or CONTENT_W
+        self._h = 32
+
+    def draw(self):
+        c  = self.canv
+        cx = self._w / 2
+
+        # Teal pill background
+        pill_w, pill_h, pill_r = 260, 26, 10
+        pill_x = cx - pill_w / 2
+        c.setFillColor(EXTERNAL_BADGE_BG)
+        c.roundRect(pill_x, 2, pill_w, pill_h, pill_r, fill=1, stroke=0)
+
+        # Badge text
+        c.setFillColor(EXTERNAL_BADGE_TEXT)
+        c.setFont("Helvetica-Bold", 9)
+        c.drawCentredString(cx, 10, "\u2b24  EXTERNAL RESEARCH MODE  \u2b24")
+
+    def wrap(self, *args):
+        return self._w, self._h
+
+
 # ── Stat pill row flowable ─────────────────────────────────────
 class StatRow(Flowable):
     """Row of 4 stat pills: critical / high / medium / low counts."""
@@ -174,7 +211,7 @@ class StatRow(Flowable):
 
 
 # ── Page header/footer canvas callback ────────────────────────
-def _make_page_decorator(company_name, generated_at):
+def _make_page_decorator(company_name, generated_at, analysis_mode):
     def _decorate(canvas, doc):
         if doc.page == 1:
             return   # cover page — no header/footer
@@ -199,10 +236,21 @@ def _make_page_decorator(company_name, generated_at):
         canvas.rect(0, 0, page_w, 12 * mm, fill=1, stroke=0)
         canvas.setFillColor(TEXT_LIGHT)
         canvas.setFont("Helvetica", 7)
-        canvas.drawString(
-            L_MARGIN, 4 * mm,
-            f"Confidential · Generated {generated_at} · AI-assisted analysis — not legal advice"
-        )
+
+        # In external mode, replace the confidentiality notice with a
+        # methodology note reminding the reader that web research was used.
+        if analysis_mode == "external":
+            footer_text = (
+                f"External Research Mode \u00b7 Findings tagged CONFIRMED / PROBABLE / UNKNOWN "
+                f"\u00b7 Generated {generated_at} \u00b7 AI-assisted \u2014 not legal advice"
+            )
+        else:
+            footer_text = (
+                f"Confidential \u00b7 Generated {generated_at} "
+                f"\u00b7 AI-assisted analysis \u2014 not legal advice"
+            )
+
+        canvas.drawString(L_MARGIN, 4 * mm, footer_text)
         canvas.setFont("Helvetica-Bold", 8)
         canvas.drawRightString(
             page_w - R_MARGIN, 4 * mm, f"Page {doc.page}"
@@ -241,6 +289,7 @@ def generate_pdf(report_data: dict) -> bytes:
 
     company_name  = report_data.get("company_name", "Unknown Company")
     analysis_type = report_data.get("analysis_type", "product")
+    analysis_mode = report_data.get("analysis_mode", "self")
     info_avail    = report_data.get("information_availability", "full")
     risk_score    = report_data.get("overall_risk_score", 0)
     risk_level    = report_data.get("overall_risk_level", "LOW")
@@ -249,6 +298,7 @@ def generate_pdf(report_data: dict) -> bytes:
     regulations   = report_data.get("applicable_regulations", [])
     scored_gaps   = report_data.get("scored_gaps", [])
     remediations  = report_data.get("remediation_plan", [])
+    is_external   = analysis_mode == "external"
 
     doc = SimpleDocTemplate(
         buffer,
@@ -285,6 +335,11 @@ def generate_pdf(report_data: dict) -> bytes:
     styles.add(ParagraphStyle("NoteBox",     parent=styles["Normal"],
         fontSize=9, leading=13, textColor=colors.HexColor("#92400e"),
         backColor=colors.HexColor("#fffbeb"), borderWidth=0,
+        borderPadding=8, spaceAfter=8))
+    # Teal note box for external research methodology note
+    styles.add(ParagraphStyle("ExternalNoteBox", parent=styles["Normal"],
+        fontSize=9, leading=13, textColor=colors.HexColor("#164e63"),
+        backColor=colors.HexColor("#ecfeff"), borderWidth=0,
         borderPadding=8, spaceAfter=8))
 
     cell_s = ParagraphStyle("TC",   parent=styles["Normal"],
@@ -338,6 +393,13 @@ def generate_pdf(report_data: dict) -> bytes:
 
     story.append(Spacer(1, 24))
 
+    # ── External Research Mode badge ─────────────────────────
+    # Shown immediately below the cover band when mode is "external".
+    # Uses a teal pill to visually distinguish from the navy brand palette.
+    if is_external:
+        story.append(ExternalResearchBadge())
+        story.append(Spacer(1, 10))
+
     # Risk badge card
     story.append(RiskBadge(risk_score, risk_level))
 
@@ -359,11 +421,13 @@ def generate_pdf(report_data: dict) -> bytes:
     meta_value = ParagraphStyle("MV", parent=styles["Normal"],
         fontSize=10, fontName="Helvetica-Bold", textColor=TEXT_DARK)
 
+    # In external mode, replace "CONFIDENCE" with "RESEARCH MODE"
     meta_items = [
-        ("ANALYSIS TYPE",       analysis_type.upper()),
-        ("INFORMATION LEVEL",   info_avail.upper()),
-        ("CONFIDENCE",          confidence.upper()),
-        ("DATE",                generated_at),
+        ("ANALYSIS TYPE",     analysis_type.upper()),
+        ("INFORMATION LEVEL", info_avail.upper()),
+        ("RESEARCH MODE" if is_external else "CONFIDENCE",
+         "EXTERNAL" if is_external else confidence.upper()),
+        ("DATE",              generated_at),
     ]
     meta_cells = []
     for label, value in meta_items:
@@ -410,6 +474,23 @@ def generate_pdf(report_data: dict) -> bytes:
         f"identified, with <b>{len(scored_gaps)}</b> compliance gaps found.",
         styles["Body"]
     ))
+
+    # ── External Research methodology note ───────────────────
+    # Shown in teal to distinguish from the amber partial-info warning.
+    # Placed before the amber warning so reading order is:
+    # 1. What mode was used  2. What the uncertainty means
+    if is_external:
+        story.append(Paragraph(
+            "<b>\u2b24 External Research Mode:</b> This report was generated "
+            "using external web research. The AI agents searched publicly "
+            "available sources to gather information about this company before "
+            "performing the analysis. Findings are tagged with confidence levels: "
+            "<b>CONFIRMED</b> (publicly verifiable), "
+            "<b>PROBABLE</b> (inferred from public data or industry norms), "
+            "and <b>UNKNOWN</b> (cannot be determined from public information). "
+            "Consult with qualified legal professionals before acting on these findings.",
+            styles["ExternalNoteBox"]
+        ))
 
     if confidence != "full":
         story.append(Paragraph(
@@ -459,34 +540,65 @@ def generate_pdf(report_data: dict) -> bytes:
     story.append(_section_header("Compliance Gaps", styles))
 
     if scored_gaps:
-        GAP_COLS = [24, 125, 232, 46, 64]   # sum = 491 ✓
-        gap_rows = [[
-            _cell("#", hdr_s), _cell("Regulation", hdr_s),
-            _cell("Gap Description", hdr_s),
-            _cell("Score", hdr_s), _cell("Risk Level", hdr_s),
-        ]]
-        for i, gap in enumerate(scored_gaps, 1):
-            lvl    = gap.get("risk_level", "")
-            rcol   = RISK_COLORS.get(lvl, TEXT_DARK)
-            rbg    = RISK_BG.get(lvl, WHITE)
-            rs     = ParagraphStyle(f"R{i}", parent=cell_b, textColor=rcol)
-            gap_rows.append([
-                _cell(str(i), cell_m),
-                _cell(gap.get("regulation", "N/A"), cell_s),
-                _cell(gap.get("gap", "N/A"), cell_s),
-                _cell(str(gap.get("severity", "N/A")), cell_b),
-                _cell(lvl, rs),
-            ])
+        # In external mode, add a "Score Range" column to show uncertainty
+        if is_external:
+            GAP_COLS = [22, 110, 200, 44, 60, 70]  # sum = 506 ✓ (extra col)
+            gap_rows = [[
+                _cell("#", hdr_s), _cell("Regulation", hdr_s),
+                _cell("Gap Description", hdr_s),
+                _cell("Score", hdr_s), _cell("Range", hdr_s),
+                _cell("Risk Level", hdr_s),
+            ]]
+            for i, gap in enumerate(scored_gaps, 1):
+                lvl    = gap.get("risk_level", "")
+                rcol   = RISK_COLORS.get(lvl, TEXT_DARK)
+                rbg    = RISK_BG.get(lvl, WHITE)
+                rs     = ParagraphStyle(f"R{i}", parent=cell_b, textColor=rcol)
+                score_range = gap.get("score_range", "—")
+                gap_rows.append([
+                    _cell(str(i), cell_m),
+                    _cell(gap.get("regulation", "N/A"), cell_s),
+                    _cell(gap.get("gap", "N/A"), cell_s),
+                    _cell(str(gap.get("severity", "N/A")), cell_b),
+                    _cell(score_range, cell_m),
+                    _cell(lvl, rs),
+                ])
+            gap_t = Table(gap_rows, colWidths=GAP_COLS, repeatRows=1)
+            ts    = TableStyle(BASE_TS[:])
+            for i, gap in enumerate(scored_gaps, 1):
+                lvl = gap.get("risk_level", "")
+                bg  = RISK_BG.get(lvl)
+                if bg:
+                    ts.add("BACKGROUND", (5, i), (5, i), bg)
+            gap_t.setStyle(ts)
+        else:
+            GAP_COLS = [24, 125, 232, 46, 64]   # sum = 491 ✓ (original layout)
+            gap_rows = [[
+                _cell("#", hdr_s), _cell("Regulation", hdr_s),
+                _cell("Gap Description", hdr_s),
+                _cell("Score", hdr_s), _cell("Risk Level", hdr_s),
+            ]]
+            for i, gap in enumerate(scored_gaps, 1):
+                lvl    = gap.get("risk_level", "")
+                rcol   = RISK_COLORS.get(lvl, TEXT_DARK)
+                rbg    = RISK_BG.get(lvl, WHITE)
+                rs     = ParagraphStyle(f"R{i}", parent=cell_b, textColor=rcol)
+                gap_rows.append([
+                    _cell(str(i), cell_m),
+                    _cell(gap.get("regulation", "N/A"), cell_s),
+                    _cell(gap.get("gap", "N/A"), cell_s),
+                    _cell(str(gap.get("severity", "N/A")), cell_b),
+                    _cell(lvl, rs),
+                ])
+            gap_t = Table(gap_rows, colWidths=GAP_COLS, repeatRows=1)
+            ts    = TableStyle(BASE_TS[:])
+            for i, gap in enumerate(scored_gaps, 1):
+                lvl = gap.get("risk_level", "")
+                bg  = RISK_BG.get(lvl)
+                if bg:
+                    ts.add("BACKGROUND", (4, i), (4, i), bg)
+            gap_t.setStyle(ts)
 
-        gap_t = Table(gap_rows, colWidths=GAP_COLS, repeatRows=1)
-        ts    = TableStyle(BASE_TS[:])   # copy base
-        # Colour the risk-level cell background per row
-        for i, gap in enumerate(scored_gaps, 1):
-            lvl = gap.get("risk_level", "")
-            bg  = RISK_BG.get(lvl)
-            if bg:
-                ts.add("BACKGROUND", (4, i), (4, i), bg)
-        gap_t.setStyle(ts)
         story.append(gap_t)
     else:
         story.append(Paragraph(
@@ -543,8 +655,22 @@ def generate_pdf(report_data: dict) -> bytes:
             fontSize=7.5, textColor=TEXT_LIGHT, alignment=TA_JUSTIFY)
     ))
 
+    # ── External Research methodology note (footer) ───────────
+    # A one-line methodology statement appended after the disclaimer
+    # when analysis_mode is "external", as requested.
+    if is_external:
+        story.append(Spacer(1, 6))
+        story.append(Paragraph(
+            "\u2b24 <b>Methodology Note:</b> This report was generated using "
+            "external web research. Findings are tagged with confidence levels: "
+            "CONFIRMED, PROBABLE, or UNKNOWN. Always verify PROBABLE and UNKNOWN "
+            "findings against internal company documentation before remediation.",
+            ParagraphStyle("ExtDisc", parent=styles["Normal"],
+                fontSize=7.5, textColor=EXTERNAL_BADGE_BG, alignment=TA_JUSTIFY)
+        ))
+
     # ── Build ─────────────────────────────────────────────────
-    decorator = _make_page_decorator(company_name, generated_at)
+    decorator = _make_page_decorator(company_name, generated_at, analysis_mode)
     doc.build(story, onFirstPage=decorator, onLaterPages=decorator)
 
     pdf_bytes = buffer.getvalue()

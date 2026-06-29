@@ -147,6 +147,9 @@ def start_analysis(
         "uploaded_document_ids": request.uploaded_document_ids,
         # Output fields — initialised empty, filled by agent nodes
         "applicable_regulations": [],
+        # Web search snippets from external mode (populated by Node 1,
+        # consumed by Nodes 2, 3, and 4). Empty list for self mode.
+        "web_search_results": [],
         "gaps": [],
         "scored_gaps": [],
         "remediation_plan": [],
