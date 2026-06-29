@@ -182,6 +182,7 @@ def score_risks(state: ComplianceState) -> dict:
         return result
 
     except Exception as e:
+        import traceback; traceback.print_exc()
         set_agent_progress(session_id, "risk_scoring", "failed")
         return {
             "scored_gaps": [],

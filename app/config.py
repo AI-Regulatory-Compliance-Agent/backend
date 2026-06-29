@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     # Qdrant
     qdrant_host: str = "qdrant"
     qdrant_port: int = 6333
+    qdrant_api_key: str = ""
     qdrant_collection: str = "regulations"
 
     # Embedding

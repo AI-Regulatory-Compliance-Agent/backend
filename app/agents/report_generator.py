@@ -87,6 +87,7 @@ def generate_report(state: ComplianceState) -> dict:
         }
 
     except Exception as e:
+        import traceback; traceback.print_exc()
         set_agent_progress(session_id, "report_generator", "failed")
         update_session(session_id, {"status": "failed"})
         return {
@@ -240,6 +241,7 @@ def _save_to_database(
         return analysis_run.id
 
     except Exception as e:
+        import traceback; traceback.print_exc()
         db.rollback()
         raise e
     finally:

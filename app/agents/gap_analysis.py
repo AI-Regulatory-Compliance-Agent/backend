@@ -143,6 +143,7 @@ def analyze_gaps(state: ComplianceState) -> dict:
         return {"gaps": all_gaps}
 
     except Exception as e:
+        import traceback; traceback.print_exc()
         set_agent_progress(session_id, "gap_analysis", "failed")
         return {
             "gaps": [],

@@ -140,6 +140,7 @@ def identify_regulations(state: ComplianceState) -> dict:
         }
 
     except Exception as e:
+        import traceback; traceback.print_exc()
         set_agent_progress(session_id, "regulation_identifier", "failed")
         return {
             "applicable_regulations": [],

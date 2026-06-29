@@ -131,6 +131,7 @@ def generate_remediation(state: ComplianceState) -> dict:
         return {"remediation_plan": remediation_plan}
 
     except Exception as e:
+        import traceback; traceback.print_exc()
         set_agent_progress(session_id, "remediation", "failed")
         return {
             "remediation_plan": [],
