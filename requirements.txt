@@ -4,49 +4,35 @@
 # All versions locked as per project specification.
 # Do NOT upgrade without updating the handoff document.
 # ============================================================
-
 # ── Web Framework ────────────────────────────────────────────
 fastapi==0.115.0
 uvicorn==0.32.0
-
 # ── Data Validation ──────────────────────────────────────────
 pydantic==2.9.2
 pydantic-settings==2.6.1
-
 # ── Database (PostgreSQL) ────────────────────────────────────
 sqlalchemy==2.0.36
 psycopg2-binary==2.9.10
-
 # ── Cache & Session (Redis) ──────────────────────────────────
 redis==5.2.0
-
 # ── Vector DB (Qdrant) ──────────────────────────────────────
 qdrant-client==1.12.0
-
 # ── Embeddings ───────────────────────────────────────────────
 sentence-transformers==3.3.0
-
 # ── Agent Framework (LangGraph + Gemini LLM) ────────────────
-langgraph==0.2.55
-langchain-google-genai==2.0.7
-
+langgraph==1.0.10
 # ── PDF Generation ───────────────────────────────────────────
 reportlab==4.2.5
-
 # ── Environment & Config ────────────────────────────────────
-python-dotenv==1.0.1
-
+python-dotenv==1.2.2
 # ── FastAPI Extras ───────────────────────────────────────────
-python-multipart==0.0.12
-
+python-multipart==0.0.32
 # ── Authentication (JWT + bcrypt) ────────────────────────────
-python-jose[cryptography]==3.3.0
+python-jose[cryptography]==3.4.0
 passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
-
 # ── Validation ───────────────────────────────────────────────
 email-validator==2.2.0
-
 # ── HTTP Client (for web_search tool) ────────────────────────
 httpx==0.28.0
 langchain-groq
