@@ -144,7 +144,7 @@ def start_analysis(
         "session_id": session_id,
         "user_id": user_id,
         # Uploaded document IDs for RAG processing
-        "uploaded_document_ids": request.uploaded_document_ids,
+        "uploaded_document_ids": request.uploaded_document_ids or [],
         # Output fields — initialised empty, filled by agent nodes
         "applicable_regulations": [],
         # Web search snippets from external mode (populated by Node 1,
@@ -391,7 +391,7 @@ def _embed_and_store_doc_chunks(chunks: list[dict], company_id: str):
             # If named vectors aren't set up yet, try without sparse
             print(f"⚠️ Qdrant upsert with named vectors failed, trying legacy format: {e}")
             for pt in batch:
-                pt.vector = dense_vector  # fallback to unnamed vector
+                pt.vector = pt.vector["dense"]  # use this point's own vector
             qdrant_client.upsert(
                 collection_name=settings.qdrant_collection,
                 points=batch

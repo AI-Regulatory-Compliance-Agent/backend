@@ -20,7 +20,7 @@ Key design decisions:
 """
 
 import uuid
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -105,6 +105,10 @@ class AnalysisRun(Base):
     # Maps directly to information_availability from the input.
     # Used by frontend to decide: show single score or range.
     confidence_level = Column(String, nullable=True)
+
+    # Error message captured when status = "failed".
+    # Populated by _mark_failed in report_generator.
+    error_message = Column(Text, nullable=True)
 
     # ── Timestamps ───────────────────────────────────────────
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -24,6 +24,7 @@ Storage:
 
 import os
 import uuid
+from uuid import UUID
 from pathlib import Path
 from typing import List, Optional
 
@@ -66,7 +67,7 @@ MAX_TOTAL_SIZE = 50 * 1024 * 1024      # 50MB
 @router.post("/upload", response_model=UploadResponse)
 async def upload_documents(
     files: List[UploadFile] = File(...),
-    company_id: Optional[str] = Query(None, description="Company ID to associate documents with"),
+    company_id: Optional[UUID] = Query(None, description="Company ID to associate documents with"),
     user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -87,7 +88,7 @@ async def upload_documents(
     total_size = 0
 
     # Create upload directory scoped by company_id or user_id
-    scope_id = company_id if company_id else user_id
+    scope_id = str(company_id) if company_id else user_id
     upload_dir = UPLOAD_BASE_DIR / scope_id
     upload_dir.mkdir(parents=True, exist_ok=True)
 
@@ -129,7 +130,7 @@ async def upload_documents(
 
         # Save document metadata to PostgreSQL
         document = Document(
-            company_id=uuid.UUID(company_id) if company_id else None,
+            company_id=company_id,
             user_id=uuid.UUID(user_id),
             filename=safe_filename,
             original_name=file.filename,

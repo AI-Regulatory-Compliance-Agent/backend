@@ -18,6 +18,7 @@ The app is served by Uvicorn on port 8000 inside Docker.
 The frontend at localhost:5173 communicates with this backend.
 """
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
@@ -33,11 +34,15 @@ from app.routers import upload
 
 settings = get_settings()
 
-# ── Create Database Tables ──────────────────────────────────
-# Creates all tables defined in app/models/ if they don't exist.
-# Uses the Base.metadata from database.py which collects all
-# models imported via app/models/__init__.py
-Base.metadata.create_all(bind=engine)
+
+# ── Lifespan: DB init deferred to startup ───────────────────
+# Defers table creation to after process boot so cold starts
+# (e.g. Docker before Postgres is ready) don't crash at import.
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    yield
+
 
 # ── Create FastAPI App ──────────────────────────────────────
 app = FastAPI(
@@ -46,7 +51,8 @@ app = FastAPI(
                 "Analyses company profiles against stored government "
                 "regulations to identify compliance gaps, risk levels, "
                 "and remediation steps.",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 # ── CORS Configuration ──────────────────────────────────────
@@ -56,15 +62,11 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",  # Vite dev server
-        "http://127.0.0.1:5173", # Alternative localhost
-        "http://20.244.40.144",
-        "http://20.244.40.144:80",
-        "http://complianceai.centralindia.cloudapp.azure.com",
-        "http://20.244.40.144",      # Azure VM frontend
-        "http://20.244.40.144:80",   # Azure VM frontend port 80
-        "http://20.244.40.144",      # Azure VM frontend
-        "http://20.244.40.144:80",   # Azure VM frontend port 80
+        "http://localhost:5173",                                   # Vite dev server
+        "http://127.0.0.1:5173",                                   # Alternative localhost
+        "http://20.244.40.144",                                    # Azure VM frontend
+        "http://20.244.40.144:80",                                 # Azure VM frontend port 80
+        "http://complianceai.centralindia.cloudapp.azure.com",     # Azure domain
     ],
     allow_credentials=True,  # Required for cookies/auth headers
     allow_methods=["*"],     # Allow all HTTP methods

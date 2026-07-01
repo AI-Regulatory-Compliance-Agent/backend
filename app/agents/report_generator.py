@@ -265,6 +265,7 @@ def _mark_failed(session_id: str, state: ComplianceState):
         if analysis_run:
             analysis_run.status = "failed"
             analysis_run.completed_at = datetime.now(timezone.utc)
+            analysis_run.error_message = state.get("error")
             db.commit()
     except Exception:
         db.rollback()

@@ -29,10 +29,17 @@ def get_session(session_id: str) -> dict | None:
 
 
 def update_session(session_id: str, updates: dict):
-    """Merge updates into existing session."""
+    """Merge updates into existing session, preserving the original TTL."""
+    import json
+    key = f"session:{session_id}"
     existing = get_session(session_id) or {}
     existing.update(updates)
-    set_session(session_id, existing)
+    
+    ttl = redis_client.ttl(key)
+    # ttl == -2: key doesn't exist; ttl == -1: key has no expiry set
+    effective_ttl = ttl if ttl > 0 else 86400
+    
+    redis_client.setex(key, effective_ttl, json.dumps(existing))
 
 
 def set_agent_progress(session_id: str, agent: str, status: str):

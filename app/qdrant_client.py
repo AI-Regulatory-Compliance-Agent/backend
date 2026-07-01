@@ -5,6 +5,12 @@ settings = get_settings()
 
 if settings.qdrant_host.startswith("http"):
     # Cloud mode — use URL directly with API key
+    if not settings.qdrant_api_key:
+        raise ValueError(
+            "QDRANT_API_KEY must be set when using Qdrant cloud "
+            f"(qdrant_host={settings.qdrant_host!r}). "
+            "Set the QDRANT_API_KEY environment variable."
+        )
     qdrant_client = QdrantClient(
         url=settings.qdrant_host,
         api_key=settings.qdrant_api_key,

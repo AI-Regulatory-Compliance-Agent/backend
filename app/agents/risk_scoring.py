@@ -407,14 +407,11 @@ def _calculate_overall_risk(
             "confidence_level": "full"
         }
     else:
-        # Partial/minimal: calculate range
-        min_score = max(0, min(severities))
-        max_score = min(100, max(severities))
-
-        # Widen range for minimal info
-        if info_availability == "minimal":
-            min_score = max(0, min_score - 15)
-            max_score = min(100, max_score + 10)
+        # Partial/minimal: calculate range as a band around the estimated score.
+        # margin reflects uncertainty in the overall score, not individual gap spread.
+        margin = 20 if info_availability == "minimal" else 10
+        min_score = max(0, estimated - margin)
+        max_score = min(100, estimated + margin)
 
         return {
             "scored_gaps": scored_gaps,
